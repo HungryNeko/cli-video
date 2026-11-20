@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""视频 -> 字符帧 (frames.gz)。只在本地跑一次,服务器不需要 ffmpeg,本机需要 numpy。
-每个字符格切成 4x8 个采样点,逐格挑最贴合的字符(象限块/半块/阴影,可选三角形),有效分辨率约为字符格的 2 倍以上。
-用法: python3 convert.py 视频.mp4 [宽=72] [高=27] [fps=30] [--tri]
-  --tri  额外启用 ◢◣◤◥ 三角形。注意:多数终端字体里它们不是"撑满整格"的,可能出现缝隙/错位,默认关闭。"""
+"""Video -> character frames (frames.gz). Run once locally; needs ffmpeg and numpy (the server needs neither).
+Each character cell is split into 4x8 samples and the best-fitting glyph is chosen per cell
+(quadrant/half blocks, shades, optional triangles), so the effective resolution is ~2x the cell grid.
+Usage: python3 convert.py video.mp4 [width=72] [height=27] [fps=30] [--tri]
+  --tri  also use the triangles ◢◣◤◥. Most terminal fonts don't draw them cell-filling,
+         which can leave gaps or misalign the picture, so they are off by default."""
 import gzip, subprocess, sys
 import numpy as np
 
@@ -12,9 +14,9 @@ src = args[0]
 W = int(args[1]) if len(args) > 1 else 72
 H = int(args[2]) if len(args) > 2 else 27
 FPS = int(args[3]) if len(args) > 3 else 30
-SW, SH = 4, 8  # 每格 4x8 个采样点(字符格宽高比约 1:2,所以采样点是方的)
+SW, SH = 4, 8  # 4x8 samples per cell (a cell is ~1:2, so the samples are square)
 
-# ---- 字符模板: 在 4x8 的采样网格上各字符"点亮"的比例 ----
+# ---- glyph templates: how much of the 4x8 sample grid each glyph lights up ----
 yy, xx = np.mgrid[0:SH, 0:SW]
 u, v = (xx + .5) / SW, (yy + .5) / SH
 glyphs, tpl = [], []
@@ -23,7 +25,7 @@ def add(ch, mask):
     glyphs.append(ch)
     tpl.append(np.asarray(mask, dtype=np.float32).ravel())
 
-QUAD = " ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█"  # 下标 = 位掩码: 1 左上, 2 右上, 4 左下, 8 右下
+QUAD = " ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█"  # index = bitmask: 1 upper-left, 2 upper-right, 4 lower-left, 8 lower-right
 for m, ch in enumerate(QUAD):
     ul, ur, ll, lr = (u < .5) & (v < .5), (u >= .5) & (v < .5), (u < .5) & (v >= .5), (u >= .5) & (v >= .5)
     add(ch, ((m & 1) > 0) * ul + ((m & 2) > 0) * ur + ((m & 4) > 0) * ll + ((m & 8) > 0) * lr)
@@ -36,7 +38,7 @@ T = np.stack(tpl)                      # (G, 32)
 bias = (T * T).sum(1)                  # |t|^2
 glyphs = np.array(glyphs)
 
-# ---- 读取视频、逐批匹配 ----
+# ---- read the video and match in batches ----
 p = subprocess.Popen(
     ["ffmpeg", "-v", "error", "-i", src, "-an", "-vf", f"fps={FPS},scale={W * SW}:{H * SH}:flags=area",
      "-f", "rawvideo", "-pix_fmt", "gray", "-"], stdout=subprocess.PIPE)
@@ -44,7 +46,7 @@ fsize = W * SW * H * SH
 BATCH = 120
 n = 0
 with gzip.open("frames.gz", "wb", 9) as out:
-    out.write(f"{W} {H} {FPS}\n".encode())  # 头部: 宽 高 帧率,server.py 自动读取
+    out.write(f"{W} {H} {FPS}\n".encode())  # header: width height fps (read by server.py)
     while True:
         buf = p.stdout.read(fsize * BATCH)
         k = len(buf) // fsize
@@ -52,9 +54,9 @@ with gzip.open("frames.gz", "wb", 9) as out:
             break
         a = np.frombuffer(buf[:k * fsize], np.uint8).reshape(k, H, SH, W, SW).astype(np.float32) / 255
         cells = a.transpose(0, 1, 3, 2, 4).reshape(-1, SH * SW)       # (k*H*W, 32)
-        best = (bias - 2 * cells @ T.T).argmin(1)                     # 平方误差最小的字符
+        best = (bias - 2 * cells @ T.T).argmin(1)                     # glyph with the smallest squared error
         ch = glyphs[best].reshape(k, H, W)
         ch = np.concatenate([ch, np.full((k, H, 1), "\n")], axis=2)
         out.write("".join(ch.ravel()).encode())
         n += k
-print(f"{n} frames, {W}x{H}, {FPS}fps, 字符集 {len(glyphs)} 种{' (含三角形)' if TRI else ''}")
+print(f"{n} frames, {W}x{H}, {FPS}fps, {len(glyphs)} glyphs{' (with triangles)' if TRI else ''}")
