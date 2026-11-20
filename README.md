@@ -45,7 +45,7 @@ This writes a new `frames.gz`. Restart the server (or rebuild the image); width,
 
 - A terminal cell is about 1:2, so `width ≈ height × 2 × video width ÷ video height`.
 - The terminal must have more rows than `height`, otherwise the picture scrolls and flickers.
-- `--tri` also uses the triangles `◢◣◤◥`. Most terminal fonts don't draw them cell-filling, so they are off by default.
+- `--tri` also uses the triangles `◢◣◤◥` for diagonal edges. Some terminal fonts don't draw them cell-filling, so they are off by default; the `frames.gz` shipped in this repo was generated with `--tri`.
 
 ## Windows cmd
 

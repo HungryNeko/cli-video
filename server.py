@@ -27,6 +27,8 @@ p{margin:10px 0 0}code{color:#ccc}
 <script>
 const W=__W__,H=__H__,FPS=__FPS__,CW=16,CH=32,HW=CW/2,HH=CH/2;
 const Q=" ▘▝▀▖▌▞▛▗▚▐▜▄▙▟█",S={"░":.25,"▒":.5,"▓":.75};  // index into Q is a bitmask: 1 UL, 2 UR, 4 LL, 8 LR
+const R={"▁":[0,.875,1,.125],"▂":[0,.75,1,.25],"▃":[0,.625,1,.375],"▅":[0,.375,1,.625],"▆":[0,.25,1,.75],"▇":[0,.125,1,.875],
+"▏":[0,0,.125,1],"▎":[0,0,.25,1],"▍":[0,0,.375,1],"▋":[0,0,.625,1],"▊":[0,0,.75,1],"▉":[0,0,.875,1],"▔":[0,0,1,.125],"▕":[.875,0,.125,1]};  // eighth blocks as [x,y,w,h] in the unit cell
 const T={"◢":[1,0,1,1,0,1],"◣":[0,0,0,1,1,1],"◤":[0,0,1,0,0,1],"◥":[0,0,1,0,1,1]};  // triangle vertices in unit cell
 const c=document.getElementById("c"),g=c.getContext("2d");
 c.width=W*CW;c.height=H*CH;
@@ -40,6 +42,7 @@ function draw(f){
     if(m>0){
       if(m&1)g.fillRect(px,py,HW,HH);if(m&2)g.fillRect(px+HW,py,HW,HH);
       if(m&4)g.fillRect(px,py+HH,HW,HH);if(m&8)g.fillRect(px+HW,py+HH,HW,HH);
+    }else if(R[ch]){const r=R[ch];g.fillRect(px+r[0]*CW,py+r[1]*CH,r[2]*CW,r[3]*CH);
     }else if(S[ch]){g.globalAlpha=S[ch];g.fillRect(px,py,CW,CH);g.globalAlpha=1;}
     else if(T[ch]){const t=T[ch];g.beginPath();g.moveTo(px+t[0]*CW,py+t[1]*CH);
       g.lineTo(px+t[2]*CW,py+t[3]*CH);g.lineTo(px+t[4]*CW,py+t[5]*CH);g.fill();}
